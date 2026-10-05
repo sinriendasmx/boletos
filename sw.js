@@ -1,5 +1,5 @@
 // Sin Riendas · permite abrir la app aunque la puerta se quede sin señal
-const CACHE = 'sr-boletaje-v1';
+const CACHE = 'sr-boletaje-v2';
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./', './index.html'])));
   self.skipWaiting();
