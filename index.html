@@ -256,6 +256,7 @@ tr.total td{font-weight:600;color:var(--crema);border-bottom:0}
         <select id="rSubtipo">
           <option value="">Elige un tipo</option>
           <option value="Regular">Regular</option>
+          <option value="Mesa de promotor">Precio preventa en taquilla</option>
           <option value="Cortesía">Cortesía</option>
         </select>
       </label>
@@ -302,6 +303,7 @@ tr.total td{font-weight:600;color:var(--crema);border-bottom:0}
             <option value="todos">Todos</option>
             <option value="preventa">Preventa pagada</option>
             <option value="taquilla">Taquilla por cobrar</option>
+            <option value="mesa">Precio preventa en taquilla</option>
             <option value="puerta">Venta en puerta</option>
             <option value="cortesia">Cortesía</option>
             <option value="entraron">Ya entraron</option>
@@ -769,7 +771,7 @@ function chip(b){
 }
 function tipoTexto(b){
   if (b.subtipo === 'Cortesía') return 'Cortesía' + (b.nota ? ` · ${b.nota}` : '');
-  if (b.subtipo === 'Mesa de promotor') return `Mesa de ${b.rp}`;
+  if (b.subtipo === 'Mesa de promotor') return `Preventa en taquilla · de parte de ${b.rp}`;
   if (b.nota === 'Venta en puerta') return 'Venta en puerta';
   return `Regular · ${String(b.canal).toLowerCase()}` + (b.rp ? ` · RP ${b.rp}` : '');
 }
@@ -777,7 +779,7 @@ function bandaTexto(b){
   if (b.estado === 'CORTESIA') return 'CORTESÍA';
   if (b.estado === 'POR COBRAR'){
     return b.subtipo === 'Mesa de promotor'
-      ? `PAGA EN TAQUILLA · ${money(b.precio)} · MESA DE ${String(b.rp).toUpperCase()}`
+      ? `PAGA EN TAQUILLA · ${money(b.precio)} · PRECIO PREVENTA`
       : `PAGA EN TAQUILLA · ${money(b.precio)}`;
   }
   if (b.canal === 'Preventa') return 'PAGADO · PREVENTA';
@@ -913,7 +915,8 @@ function formRegistro(){
   $('#optTaquilla').textContent = `Taquilla · paga ${money(cfgN('precio_taquilla', 170))} en la puerta`;
   $('#rCanalW').classList.toggle('hidden', st !== 'Regular');
   $('#rMetodoW').classList.toggle('hidden', !(st === 'Regular' && canal === 'Preventa'));
-  $('#rRpW').classList.toggle('hidden', st !== 'Regular');
+  $('#rRpW').classList.toggle('hidden', !(st === 'Regular' || st === 'Mesa de promotor'));
+  $('#rRpLabel').textContent = st === 'Mesa de promotor' ? '¿De parte de quién? (promotor, RP o tú)' : 'Código RP (opcional)';
   $('#rNotaW').classList.toggle('hidden', st !== 'Cortesía');
   resumen();
 }
@@ -924,6 +927,7 @@ function borradorRegistro(){
     b.canal = $('#rCanal').value;
     if (b.canal === 'Preventa'){ b.precio = cfgN('precio_preventa', 150); b.estado = 'PAGADO'; b.metodo = $('#rMetodo').value; }
     else if (b.canal === 'Taquilla'){ b.precio = cfgN('precio_taquilla', 170); b.estado = 'POR COBRAR'; }
+  } else if (st === 'Mesa de promotor'){ b.canal = 'Taquilla'; b.precio = cfgN('precio_mesa', 150); b.estado = 'POR COBRAR';
   } else if (st === 'Cortesía'){ b.canal = 'Cortesía'; b.precio = 0; b.estado = 'CORTESIA'; b.rp = ''; b.nota = $('#rNota').value; }
   b.personas = $$('.persona').map(p => ({ nombre: p.querySelector('.pNombre').value.trim().replace(/\s+/g, ' '), whatsapp: p.querySelector('.pTel').value.replace(/\D/g, '') }))
     .filter(p => p.nombre || p.whatsapp);
@@ -942,6 +946,7 @@ function validarRegistro(b){
   if (!b.subtipo) return 'Elige el tipo de boleto';
   if (b.subtipo === 'Regular' && !b.canal) return 'Elige si es preventa o taquilla';
   if (b.canal === 'Preventa' && !b.metodo) return 'Indica cómo pagó la preventa';
+  if (b.subtipo === 'Mesa de promotor' && !b.rp) return 'Escribe de parte de quién va (promotor, RP o tu nombre)';
   if (b.subtipo === 'Cortesía' && !b.nota) return 'Indica para quién es la cortesía';
   if (!b.personas.length) return 'Escribe al menos un nombre';
   if (b.personas.some(p => p.nombre.length < 3)) return 'Cada renglón necesita nombre y apellido';
@@ -978,6 +983,7 @@ function filtra(list, q, f){
     switch (f){
       case 'preventa': return !b.anulado && b.canal === 'Preventa';
       case 'taquilla': return !b.anulado && b.estado === 'POR COBRAR';
+      case 'mesa': return !b.anulado && b.subtipo === 'Mesa de promotor';
       case 'puerta': return !b.anulado && b.nota === 'Venta en puerta';
       case 'cortesia': return !b.anulado && b.subtipo === 'Cortesía';
       case 'entraron': return !!b.entrada;
@@ -1743,7 +1749,7 @@ function construirReporte(){
 
   // boletos por tipo
   const grupos = [['Preventa', b => b.canal === 'Preventa'], ['Taquilla registrada', b => b.subtipo === 'Regular' && b.canal === 'Taquilla' && b.nota !== 'Venta en puerta'],
-    ['Venta en puerta', b => b.nota === 'Venta en puerta'], ['Mesa de promotor (anterior)', b => b.subtipo === 'Mesa de promotor'], ['Cortesía', b => b.subtipo === 'Cortesía']];
+    ['Venta en puerta', b => b.nota === 'Venta en puerta'], ['Precio preventa en taquilla', b => b.subtipo === 'Mesa de promotor'], ['Cortesía', b => b.subtipo === 'Cortesía']];
   const cobrado = b => (b.estado === 'PAGADO' || b.estado === 'COBRADO') ? +b.precio : 0;
   sec.push({ t:'Boletos por tipo', h:['Tipo', 'Boletos', 'Entraron', 'Cobrado'], rows:grupos.map(([n, f]) => { const g = B.filter(f); return [n, g.length, g.filter(b => b.entrada).length, money(sum(g, cobrado))]; }).filter(r => r[1]),
     total:['Total', B.length, entraron, money(sum(B, cobrado))] });
