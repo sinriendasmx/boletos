@@ -820,6 +820,16 @@ function openTicket(b){
 }
 let reintento = null;
 function noEncontrado(irBuscar){
+  if (S.lastError){
+    const barra = S.tab === 'canjear';
+    const acts = barra ? [] : [['Buscar por nombre', irBuscar]];
+    if (!barra && S.user.rol !== 'seguridad') acts.push(['Venderle en Venta en puerta', () => { closeOverlay(); go('venta'); }, 'ghost']);
+    acts.push(['Cerrar', closeOverlay, 'ghost']);
+    return showOverlay({ kind:'error', title:'No está en este celular',
+      sub: barra ? 'Sin señal: esta cortesía o reservación se hizo después de que este celular se actualizó. Llama a Diego o a Jorge.'
+                 : 'Sin señal: este boleto se registró después de que este celular se actualizó. Búscalo en la lista impresa o véndele en Venta en puerta.',
+      actions: acts });
+  }
   showOverlay({ kind:'error', title:'No encontrado',
     sub:'No está en la lista de este celular. Toca "Actualizar y reintentar". Si sigue sin salir, búscalo por nombre.',
     actions:[['Actualizar y reintentar', async () => { closeOverlay(); await sync(); if (reintento) reintento(); }], ['Buscar por nombre', irBuscar, 'ghost'], ['Cerrar', closeOverlay, 'ghost']] });
@@ -1421,7 +1431,8 @@ function dlgEfectivo(total){
     });
   });
 }
-const esCantarote = id => ['THT', 'TJC', 'TCASA'].includes(id);
+const MESA_PROD = ['THT', 'TJC', 'TDB', 'BHT', 'BJC', 'BDB'];
+const esCantarote = id => MESA_PROD.includes(id) || id === 'TCASA';
 function finalizarVenta(pago){
   const items = K.cart.map(i => ({ p:i.p, q:i.q }));
   const base = { type:'orden', id:'O' + rid(6), tipo:'venta', items, total: totalCarrito(), metodo: pago.metodo,
@@ -1545,8 +1556,8 @@ function formReserva(mesaSel, ed){
     <label>Tipo de reservación<select id="frMod"><option value="">Elige</option>
       <option value="prepago">Pagó el cantarote por adelantado</option><option value="al_llegar">Paga el cantarote al llegar</option>
       <option value="promotor">Promotor · mesa sin cantarote</option></select></label>
-    <label id="frProdW" class="hidden">Cantarote<select id="frProd"><option value="">Elige</option>
-      ${['THT', 'TJC'].map(id => `<option value="${id}">${esc(prod(id).nombre)} · ${money(prod(id).precio)}</option>`).join('')}</select></label>
+    <label id="frProdW" class="hidden">Cantarote o botella<select id="frProd"><option value="">Elige</option>
+      ${MESA_PROD.filter(id => S.D.Productos.some(p => p.id === id && p.activo !== false)).map(id => `<option value="${id}">${esc(prod(id).nombre)} · ${money(prod(id).precio)}</option>`).join('')}</select></label>
     <label id="frMetW" class="hidden">¿Cómo pagó?<select id="frMet"><option value="">Elige</option><option>Transferencia</option><option>Efectivo</option><option>Tarjeta</option></select></label>
     <div class="err" id="frE"></div>
     <button class="btn primary" type="button" id="frOk">${ed ? 'Guardar cambios' : 'Reservar'}</button><button class="btn ghost" type="button" id="frX">Cancelar</button>`, c => {
@@ -1840,14 +1851,15 @@ function construirReporte(){
     nota: sinCostos ? 'Para ver utilidad de barra, captura los costos en Inventario.' : `Utilidad bruta de barra (antes de gastos del evento): ${money(utilidadBarra)}.` });
 
   // indicadores
-  const cantarotes = sum(vendidosItems.filter(i => ['THT', 'TJC'].includes(i.p)), i => i.q);
+  const cantarotes = sum(vendidosItems.filter(i => ['THT', 'TJC', 'TDB'].includes(i.p)), i => i.q);
+  const botellas = sum(vendidosItems.filter(i => ['BHT', 'BJC', 'BDB'].includes(i.p)), i => i.q);
   const mesasOc = S.D.Mesas.filter(m => m.activa !== false && m.estado === 'ocupada').length;
   sec.push({ t:'Indicadores para la siguiente edición', h:['Indicador', 'Valor'], rows:[
     ['Asistentes que entraron', entraron],
     ['Gasto promedio en barra por asistente', entraron ? money(barraBruto / entraron) : '—'],
     ['Boleto promedio cobrado', B.some(b => b.estado === 'PAGADO' || b.estado === 'COBRADO') ? money((boletosPre + boletosPuerta) / B.filter(b => b.estado === 'PAGADO' || b.estado === 'COBRADO').length) : '—'],
     ['Barra como % del ingreso total', (boletosPre + boletosPuerta + barraBruto) ? Math.round(barraBruto * 100 / (boletosPre + boletosPuerta + barraBruto)) + '%' : '—'],
-    ['Cantarotes vendidos', cantarotes], ['Mesas ocupadas ahora', `${mesasOc} de ${S.D.Mesas.filter(m => m.activa !== false).length}`],
+    ['Cantarotes vendidos', cantarotes], ['Botellas vendidas', botellas], ['Mesas ocupadas ahora', `${mesasOc} de ${S.D.Mesas.filter(m => m.activa !== false).length}`],
     ['Órdenes de barra', ventas.length], ['Ticket promedio por orden', ventas.length ? money(sum(ventas, o => +o.total) / ventas.length) : '—']] });
 
   // por producto
